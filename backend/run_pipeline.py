@@ -7,6 +7,7 @@ Usage (from the backend/ folder):
     python run_pipeline.py history     # last N seasons of results (slow, run once)
     python run_pipeline.py all         # everything above
     python run_pipeline.py features    # build model features -> data/features.csv
+    python run_pipeline.py train       # train, evaluate, and save the model
 """
 import argparse
 
@@ -32,7 +33,7 @@ def build_features():
 
 def main():
     parser = argparse.ArgumentParser(description="NBA dashboard data pipeline")
-    parser.add_argument("task", choices=["init", "today", "headlines", "history", "all", "features"])
+    parser.add_argument("task", choices=["init", "today", "headlines", "history", "all", "features", "train"])
     parser.add_argument("--seasons", nargs="*", help='e.g. --seasons 2024-25 2025-26')
     args = parser.parse_args()
 
@@ -45,6 +46,9 @@ def main():
         update_history(args.seasons)
     if args.task == "features":
         build_features()
+    if args.task == "train":
+        from model.train import train
+        train()
     if args.task == "init":
         print("[db] tables ready")
 

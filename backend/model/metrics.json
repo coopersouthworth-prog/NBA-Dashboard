@@ -1,0 +1,31 @@
+{
+  "model": "Logistic regression",
+  "params": {
+    "C": 0.1
+  },
+  "test_season": "2025-26",
+  "test_games": 1225,
+  "test": {
+    "accuracy": 0.6808163265306122,
+    "log_loss": 0.5953371532380816,
+    "brier": 0.2044779315258829
+  },
+  "baselines": {
+    "Always pick home team": {
+      "accuracy": 0.5542857142857143,
+      "log_loss": 0.6874640597401358,
+      "brier": 0.24716325929577904
+    },
+    "Elo favorite": {
+      "accuracy": 0.676734693877551,
+      "log_loss": 0.6065680797401761,
+      "brier": 0.20866233036163392
+    }
+  },
+  "trained_on": [
+    "2023-24",
+    "2024-25",
+    "2025-26"
+  ],
+  "trained_at": "2026-10-28T18:46:28.972270+00:00"
+}
