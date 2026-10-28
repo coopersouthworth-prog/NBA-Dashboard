@@ -132,7 +132,25 @@ def compute_elo(games):
     return games, ratings, last_season
 
 
-# ---- Put it together --------------------------------------------------------
+# ---- Turning two teams' numbers into model features ------------------------
+TEAM_COLS = [f"r_{s}" for s in ROLLING_STATS] + ["season_win_pct", "rest", "b2b"]
+
+
+def add_matchup_features(df):
+    """Compute FEATURE_COLUMNS from home_*/away_* team columns and Elo ratings.
+
+    Used for BOTH training and live predictions, so the model always sees
+    features calculated exactly the same way.
+    """
+    df["elo_diff"] = df["home_elo"] - df["away_elo"]
+    df["elo_prob"] = elo_win_prob(df["home_elo"], df["away_elo"])
+    for s in ROLLING_STATS:
+        df[f"diff_{s}"] = df[f"home_r_{s}"] - df[f"away_r_{s}"]
+    df["diff_season_win_pct"] = df["home_season_win_pct"] - df["away_season_win_pct"]
+    return df
+
+
+# ---- Training data: every historical game -----------------------------------
 def build_game_features():
     """One row per historical game: model features + the home_win label."""
     with get_conn() as conn:
@@ -141,23 +159,50 @@ def build_game_features():
     games, _, _ = compute_elo(games)
 
     team = add_pregame_team_features(add_advanced_stats(load_team_games()))
-    team_cols = [f"r_{s}" for s in ROLLING_STATS] + ["season_win_pct", "rest", "b2b"]
-
     for side in ("home", "away"):
-        side_feats = team[["game_id", "team_id"] + team_cols].rename(
+        side_feats = team[["game_id", "team_id"] + TEAM_COLS].rename(
             columns={"team_id": f"{side}_team_id",
-                     **{c: f"{side}_{c}" for c in team_cols}})
+                     **{c: f"{side}_{c}" for c in TEAM_COLS}})
         games = games.merge(side_feats, on=["game_id", f"{side}_team_id"], how="left")
 
-    games["elo_diff"] = games["home_elo"] - games["away_elo"]
-    games["elo_prob"] = elo_win_prob(games["home_elo"], games["away_elo"])
-    for s in ROLLING_STATS:
-        games[f"diff_{s}"] = games[f"home_r_{s}"] - games[f"away_r_{s}"]
-    games["diff_season_win_pct"] = games["home_season_win_pct"] - games["away_season_win_pct"]
-
+    games = add_matchup_features(games)
     # Drop games where a team didn't have enough history yet (start of the data).
     games = games.dropna(subset=FEATURE_COLUMNS).reset_index(drop=True)
     return games
+
+
+# ---- Live data: each team's numbers going into an upcoming game -------------
+def pregame_elo(ratings, last_season, team_id, season):
+    """A team's Elo heading into a game, applying the new-season regression if needed."""
+    if team_id not in ratings:
+        return ELO_START
+    if last_season[team_id] != season:
+        return ELO_CARRYOVER * ratings[team_id] + (1 - ELO_CARRYOVER) * ELO_START
+    return ratings[team_id]
+
+
+def latest_team_state(team_games, as_of, season):
+    """Each team's pre-game numbers for a game on `as_of`, using only earlier games.
+
+    Mirrors add_pregame_team_features: the mean of the last ROLL_WINDOW games,
+    season-to-date win %, and days of rest.
+    """
+    past = team_games[team_games["game_date"] < as_of]
+    past = past.sort_values(["team_id", "game_date", "game_id"])
+    state = {}
+    for team_id, g in past.groupby("team_id"):
+        if len(g) < MIN_GAMES:
+            continue
+        recent = g.tail(ROLL_WINDOW)
+        this_season = g[g["season"] == season]
+        rest = min((as_of - g["game_date"].max()).days, MAX_REST)
+        state[team_id] = {
+            **{f"r_{s}": recent[s].mean() for s in ROLLING_STATS},
+            "season_win_pct": this_season["won"].mean() if len(this_season) else 0.5,
+            "rest": rest,
+            "b2b": int(rest == 1),
+        }
+    return state
 
 
 def summarize(games):

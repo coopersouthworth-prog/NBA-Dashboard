@@ -55,6 +55,19 @@ CREATE TABLE IF NOT EXISTS team_game_stats (
 );
 CREATE INDEX IF NOT EXISTS idx_tgs_team_date ON team_game_stats (team_id, game_date);
 
+-- One prediction per game, locked in before tip-off.
+CREATE TABLE IF NOT EXISTS predictions (
+    game_id             TEXT PRIMARY KEY,
+    game_date           TEXT NOT NULL,
+    home_team_id        INTEGER NOT NULL,
+    away_team_id        INTEGER NOT NULL,
+    home_win_prob       REAL NOT NULL,     -- 0 to 1
+    predicted_winner_id INTEGER NOT NULL,
+    predicted_tricode   TEXT,
+    model               TEXT,
+    created_at          TEXT
+);
+
 CREATE TABLE IF NOT EXISTS headlines (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     title        TEXT NOT NULL,
