@@ -1,0 +1,55 @@
+# Keeps the live site's data fresh. Runs on GitHub's servers for free (public repo).
+# All times are UTC: 17:00-06:59 UTC is roughly 1pm-3am Eastern.
+name: Data pipeline
+
+on:
+  schedule:
+    - cron: "*/15 0-6,17-23 * * *"   # scores: every 15 minutes during game hours
+    - cron: "0 15,21 * * *"          # predictions: about 11am and 5pm Eastern
+    - cron: "30 */3 * * *"           # headlines: every 3 hours
+  workflow_dispatch:                 # adds a "Run workflow" button on the Actions tab
+    inputs:
+      task:
+        description: Command to run
+        type: choice
+        default: predict
+        options: [predict, today, results, headlines]
+
+# Never run two copies at once (they'd write the same rows).
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"     # match the Python version on your computer
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      - name: Choose the command for this run
+        id: task
+        run: |
+          case "${{ github.event.schedule }}" in
+            "*/15 0-6,17-23 * * *") task=today ;;
+            "0 15,21 * * *")        task=predict ;;
+            "30 */3 * * *")         task=headlines ;;
+            *)                      task="${{ inputs.task || 'predict' }}" ;;
+          esac
+          echo "task=$task" >> "$GITHUB_OUTPUT"
+
+      - name: Run it
+        run: python run_pipeline.py ${{ steps.task.outputs.task }}

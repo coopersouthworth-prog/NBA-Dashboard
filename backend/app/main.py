@@ -8,6 +8,7 @@ import json
 import os
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,8 +16,17 @@ from fastapi.responses import RedirectResponse
 
 from app.schemas import Game, GamesResponse, Headline, ModelInfo, Prediction, Record, Team
 from db import fetch_all, fetch_value, get_conn, init_db
-from model.train import METRICS_PATH
-from pipeline.history import current_season
+
+# The API only reads data, so it avoids importing the heavy model and NBA
+# libraries. That keeps memory low and cold starts fast on Render's free tier.
+METRICS_PATH = Path(__file__).resolve().parent.parent / "model" / "metrics.json"
+
+
+def current_season(today=None):
+    """NBA seasons start in October: Oct 2026 -> '2026-27', Mar 2027 -> '2026-27'."""
+    today = today or date.today()
+    start = today.year if today.month >= 10 else today.year - 1
+    return f"{start}-{str(start + 1)[-2:]}"
 
 STATUS = {1: "scheduled", 2: "live", 3: "final"}
 LOGO_URL = "https://cdn.nba.com/logos/nba/{team_id}/global/L/logo.svg"
