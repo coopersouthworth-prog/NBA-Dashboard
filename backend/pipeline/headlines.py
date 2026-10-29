@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import feedparser
 
 from config import HEADLINE_FEEDS
-from db import get_conn
+from db import fetch_value, get_conn, upsert
 
 TAG_RE = re.compile(r"<[^>]+>")
 
@@ -42,12 +42,8 @@ def fetch_headlines():
 def update_headlines():
     items = fetch_headlines()
     with get_conn() as conn:
-        before = conn.total_changes
-        conn.executemany(
-            "INSERT OR IGNORE INTO headlines (title, link, summary, source, published_at, fetched_at) "
-            "VALUES (:title, :link, :summary, :source, :published_at, :fetched_at)",
-            items,
-        )
-        added = conn.total_changes - before
+        before = fetch_value(conn, "SELECT COUNT(*) FROM headlines")
+        upsert(conn, "headlines", items, keys=["link"], update=False)  # skip ones we have
+        added = fetch_value(conn, "SELECT COUNT(*) FROM headlines") - before
     print(f"[headlines] {added} new of {len(items)} fetched")
     return items

@@ -10,6 +10,7 @@ Usage (from the backend/ folder):
     python run_pipeline.py train       # train, evaluate, and save the model
     python run_pipeline.py predict     # refresh games + results, then predict today
     python run_pipeline.py all         # today, headlines, history, results, predict
+    python run_pipeline.py copy-to-postgres   # one-time: local SQLite -> DATABASE_URL
 """
 import argparse
 
@@ -27,6 +28,7 @@ def build_features():
 
     games = build_game_features()
     out = DB_PATH.parent / "features.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
     keep = ["game_id", "season", "game_date", "home_tricode", "away_tricode",
             "home_pts", "away_pts", "home_win"] + FEATURE_COLUMNS
     games[keep].to_csv(out, index=False)
@@ -35,7 +37,7 @@ def build_features():
 
 
 TASKS = ["init", "today", "headlines", "history", "results",
-         "features", "train", "predict", "all"]
+         "features", "train", "predict", "all", "copy-to-postgres"]
 
 
 def main():
@@ -44,6 +46,11 @@ def main():
     parser.add_argument("--seasons", nargs="*", help="e.g. --seasons 2024-25 2025-26")
     args = parser.parse_args()
     t = args.task
+
+    if t == "copy-to-postgres":
+        from db import copy_sqlite_to_postgres
+        copy_sqlite_to_postgres()
+        return
 
     init_db()  # safe to run every time
     if t in ("today", "predict", "all"):

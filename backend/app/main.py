@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.schemas import Game, GamesResponse, Headline, ModelInfo, Prediction, Record, Team
-from db import get_conn, init_db
+from db import fetch_all, fetch_value, get_conn, init_db
 from model.train import METRICS_PATH
 from pipeline.history import current_season
 
@@ -93,12 +93,13 @@ def games(day: str | None = Query(None, alias="date",
         except ValueError:
             raise HTTPException(400, "date must be YYYY-MM-DD")
     with get_conn() as conn:
-        day = day or conn.execute("SELECT MAX(game_date) FROM games").fetchone()[0]
-        rows = conn.execute(
+        day = day or fetch_value(conn, "SELECT MAX(game_date) FROM games")
+        rows = fetch_all(
+            conn,
             """SELECT g.*, p.home_win_prob, p.predicted_winner_id, p.predicted_tricode
                FROM games g LEFT JOIN predictions p ON p.game_id = g.game_id
-               WHERE g.game_date = ?
-               ORDER BY g.start_time_utc, g.game_id""", (day,)).fetchall()
+               WHERE g.game_date = :day
+               ORDER BY g.start_time_utc, g.game_id""", day=day)
     return GamesResponse(
         date=day,
         updated_at=max((r["updated_at"] for r in rows if r["updated_at"]), default=None),
@@ -110,11 +111,12 @@ def games(day: str | None = Query(None, alias="date",
 def headlines(limit: int = Query(15, ge=1, le=50)):
     """Most recent headlines first."""
     with get_conn() as conn:
-        rows = conn.execute(
+        rows = fetch_all(
+            conn,
             """SELECT title, link, summary, source, published_at FROM headlines
-               ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT ?""",
-            (limit,)).fetchall()
-    return [Headline(**dict(r)) for r in rows]
+               ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT :limit""",
+            limit=limit)
+    return [Headline(**r) for r in rows]
 
 
 @app.get("/api/model", response_model=ModelInfo)
@@ -124,10 +126,11 @@ def model_info():
 
     season_start = f"{current_season()[:4]}-10-01"
     with get_conn() as conn:
-        rows = conn.execute(
+        rows = fetch_all(
+            conn,
             """SELECT g.*, p.predicted_winner_id FROM predictions p
                JOIN games g ON g.game_id = p.game_id
-               WHERE g.status = 3 AND g.game_date >= ?""", (season_start,)).fetchall()
+               WHERE g.status = 3 AND g.game_date >= :start""", start=season_start)
     graded = [(winner_id(r), r["predicted_winner_id"]) for r in rows]
     graded = [(w, p) for w, p in graded if w is not None]
     correct = sum(w == p for w, p in graded)

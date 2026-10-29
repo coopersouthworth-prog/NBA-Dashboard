@@ -10,7 +10,7 @@ from datetime import date
 from nba_api.live.nba.endpoints import boxscore
 
 from config import REQUEST_DELAY
-from db import get_conn
+from db import fetch_all, fetch_value, get_conn, upsert
 from pipeline.history import current_season
 
 REGULAR_SEASON_PREFIX = "002"   # NBA game ids: 001 preseason, 002 regular season, 004 playoffs...
@@ -29,14 +29,14 @@ STAT_FIELDS = {
 def pending_games(conn):
     """Regular-season games we've seen on the scoreboard that are finished
     (or from an earlier day) but aren't in the history tables yet."""
-    latest = conn.execute("SELECT MAX(game_date) FROM games").fetchone()[0]
-    return conn.execute(
+    latest = fetch_value(conn, "SELECT MAX(game_date) FROM games")
+    return fetch_all(
+        conn,
         """SELECT game_id, game_date FROM games
-           WHERE game_id LIKE ? || '%'
+           WHERE game_id LIKE :prefix
              AND game_id NOT IN (SELECT game_id FROM historical_games)
-             AND (status = 3 OR game_date < ?)""",
-        (REGULAR_SEASON_PREFIX, latest),
-    ).fetchall()
+             AND (status = 3 OR game_date < :latest)""",
+        prefix=REGULAR_SEASON_PREFIX + "%", latest=latest)
 
 
 def team_row(game_id, season, game_date, team, opp, is_home):
@@ -80,12 +80,7 @@ def update_results():
             "home_win": int(home["score"] > away["score"]),
         }
         with get_conn() as conn:
-            cols = list(rows[0])
-            conn.executemany(
-                f"INSERT OR REPLACE INTO team_game_stats ({', '.join(cols)}) "
-                f"VALUES ({', '.join(':' + c for c in cols)})", rows)
-            conn.execute(
-                f"INSERT OR REPLACE INTO historical_games ({', '.join(game)}) "
-                f"VALUES ({', '.join(':' + c for c in game)})", game)
+            upsert(conn, "team_game_stats", rows, keys=["game_id", "team_id"])
+            upsert(conn, "historical_games", [game], keys=["game_id"])
         added += 1
     print(f"[results] added {added} finished games ({len(pending)} pending)")

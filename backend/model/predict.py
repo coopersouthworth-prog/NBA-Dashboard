@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import joblib
 import pandas as pd
 
-from db import get_conn
+from db import fetch_value, get_conn, read_df, records, upsert
 from model.features import (TEAM_COLS, add_advanced_stats, add_matchup_features,
                             compute_elo, latest_team_state, load_team_games,
                             pregame_elo)
@@ -20,9 +20,8 @@ PREDICT_PREFIXES = ("002", "004", "005", "006")
 
 
 def load_upcoming_games(conn):
-    latest = conn.execute("SELECT MAX(game_date) FROM games").fetchone()[0]
-    games = pd.read_sql(
-        "SELECT * FROM games WHERE status = 1 AND game_date = ?", conn, params=(latest,))
+    latest = fetch_value(conn, "SELECT MAX(game_date) FROM games")
+    games = read_df(conn, "SELECT * FROM games WHERE status = 1 AND game_date = :d", d=latest)
     return games[games["game_id"].str[:3].isin(PREDICT_PREFIXES)]
 
 
@@ -35,7 +34,7 @@ def predict_today():
 
     with get_conn() as conn:
         upcoming = load_upcoming_games(conn)
-        history = pd.read_sql("SELECT * FROM historical_games", conn)
+        history = read_df(conn, "SELECT * FROM historical_games")
     if upcoming.empty:
         print("[predict] no upcoming games to predict")
         return []
@@ -74,16 +73,12 @@ def predict_today():
 
     cols = ["game_id", "game_date", "home_team_id", "away_team_id", "home_win_prob",
             "predicted_winner_id", "predicted_tricode", "model", "created_at"]
-    records = df[cols].astype(object).to_dict("records")
-    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "game_id")
+    rows = records(df[cols])
     with get_conn() as conn:
-        conn.executemany(
-            f"INSERT INTO predictions ({', '.join(cols)}) "
-            f"VALUES ({', '.join(':' + c for c in cols)}) "
-            f"ON CONFLICT(game_id) DO UPDATE SET {updates}", records)
+        upsert(conn, "predictions", rows, keys=["game_id"])
 
     print(f"[predict] {len(df)} games for {as_of.date()}:")
     for r in df.itertuples():
         prob = max(r.home_win_prob, 1 - r.home_win_prob)
         print(f"  {r.away_tricode:>3} @ {r.home_tricode:<3}  ->  {r.predicted_tricode} ({prob:.0%})")
-    return records
+    return rows

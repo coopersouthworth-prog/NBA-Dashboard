@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from nba_api.live.nba.endpoints import scoreboard
 
-from db import get_conn
+from db import get_conn, upsert
 
 
 def fetch_todays_games():
@@ -34,17 +34,8 @@ def fetch_todays_games():
 
 
 def save_games(games):
-    if not games:
-        return
-    cols = list(games[0].keys())
-    updates = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "game_id")
-    sql = (
-        f"INSERT INTO games ({', '.join(cols)}) "
-        f"VALUES ({', '.join(':' + c for c in cols)}) "
-        f"ON CONFLICT(game_id) DO UPDATE SET {updates}"
-    )
     with get_conn() as conn:
-        conn.executemany(sql, games)
+        upsert(conn, "games", games, keys=["game_id"])
 
 
 def update_todays_games():

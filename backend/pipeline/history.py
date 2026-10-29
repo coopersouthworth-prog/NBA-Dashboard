@@ -6,7 +6,7 @@ import pandas as pd
 from nba_api.stats.endpoints import leaguegamefinder
 
 from config import HISTORY_SEASONS, REQUEST_DELAY
-from db import get_conn
+from db import get_conn, records, upsert
 
 STAT_COLS = ["PTS", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
              "OREB", "DREB", "REB", "AST", "STL", "BLK", "TOV", "PF"]
@@ -82,17 +82,6 @@ def build_tables(df):
     return games, team_stats
 
 
-def _upsert_df(conn, table, df):
-    if df.empty:
-        return
-    cols = list(df.columns)
-    sql = (f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) "
-           f"VALUES ({', '.join('?' for _ in cols)})")
-    rows = [tuple(None if pd.isna(v) else (v.item() if hasattr(v, "item") else v)
-                  for v in row) for row in df.itertuples(index=False)]
-    conn.executemany(sql, rows)
-
-
 def update_history(seasons=None):
     seasons = seasons or recent_seasons()
     for i, season in enumerate(seasons):
@@ -101,6 +90,6 @@ def update_history(seasons=None):
         raw = fetch_season(season)
         games, team_stats = build_tables(raw)
         with get_conn() as conn:
-            _upsert_df(conn, "historical_games", games)
-            _upsert_df(conn, "team_game_stats", team_stats)
+            upsert(conn, "historical_games", records(games), keys=["game_id"])
+            upsert(conn, "team_game_stats", records(team_stats), keys=["game_id", "team_id"])
         print(f"[history] {season}: {len(games)} games")

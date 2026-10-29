@@ -6,7 +6,7 @@ before each game updates them, so the model never peeks at the result.
 """
 import pandas as pd
 
-from db import get_conn
+from db import get_conn, read_df
 
 # ---- Settings ---------------------------------------------------------------
 ROLL_WINDOW = 10        # "recent form" = a team's last 10 games
@@ -43,7 +43,7 @@ FEATURE_COLUMNS = (
 def load_team_games():
     """One row per team per game, with the opponent's stats alongside."""
     with get_conn() as conn:
-        tg = pd.read_sql("SELECT * FROM team_game_stats", conn)
+        tg = read_df(conn, "SELECT * FROM team_game_stats")
     tg["game_date"] = pd.to_datetime(tg["game_date"])
 
     opp = tg[["game_id", "team_id", "fga", "oreb", "dreb", "tov", "fta"]].rename(
@@ -154,7 +154,7 @@ def add_matchup_features(df):
 def build_game_features():
     """One row per historical game: model features + the home_win label."""
     with get_conn() as conn:
-        games = pd.read_sql("SELECT * FROM historical_games", conn)
+        games = read_df(conn, "SELECT * FROM historical_games")
     games["game_date"] = pd.to_datetime(games["game_date"])
     games, _, _ = compute_elo(games)
 
