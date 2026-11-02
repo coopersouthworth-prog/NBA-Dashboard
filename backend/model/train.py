@@ -81,6 +81,28 @@ def tune(build, grid, X_fit, y_fit, X_val, y_val):
     return best
 
 
+def accuracy_by_month(games, test_season, y_test, test_probs, best_name):
+    """How accuracy changes through the test season.
+
+    Early-season games are harder to call: rolling stats still include last
+    season's games and Elo hasn't caught up to offseason roster changes.
+    This shows what a fair live record looks like at each point in a season.
+    """
+    dates = games.loc[games["season"] == test_season, "game_date"]
+    months = dates.dt.to_period("M").astype(str).to_numpy()
+    y = y_test.to_numpy()
+    rows = []
+    print(f"\n[train] {test_season} accuracy by month:")
+    print(f"  {'month':<9}{'games':>6}{'Elo fav':>9}{'this model':>12}")
+    for month in sorted(set(months)):
+        m = months == month
+        elo = float(((test_probs["Elo favorite"][m] > 0.5) == y[m]).mean())
+        ours = float(((test_probs[best_name][m] > 0.5) == y[m]).mean())
+        rows.append({"month": month, "games": int(m.sum()), "elo": elo, "model": ours})
+        print(f"  {month:<9}{int(m.sum()):>6}{elo:>9.1%}{ours:>12.1%}")
+    return rows
+
+
 # ---- Main training routine --------------------------------------------------
 def train():
     games = build_game_features()
@@ -103,11 +125,13 @@ def train():
         "Always pick home team": score(y_test, np.full(len(y_test), y_train.mean())),
         "Elo favorite": score(y_test, X_test["elo_prob"].to_numpy()),
     }
+    test_probs = {"Elo favorite": X_test["elo_prob"].to_numpy()}
     chosen = {}
     for name, (build, grid) in CANDIDATES.items():
         params, val_loss = tune(build, grid, X_fit, y_fit, X_val, y_val)
         model = build(**params).fit(X_train, y_train)
-        results[name] = score(y_test, model.predict_proba(X_test)[:, 1])
+        test_probs[name] = model.predict_proba(X_test)[:, 1]
+        results[name] = score(y_test, test_probs[name])
         chosen[name] = {"params": params, "val_log_loss": val_loss}
 
     print(f"\n  {'model':<24}{'accuracy':>9}{'log loss':>10}{'brier':>8}")
@@ -118,6 +142,7 @@ def train():
     best_name = min(chosen, key=lambda n: chosen[n]["val_log_loss"])
     build = CANDIDATES[best_name][0]
     print(f"\n[train] chosen: {best_name} {chosen[best_name]['params']}")
+    by_month = accuracy_by_month(games, test_season, y_test, test_probs, best_name)
 
     if best_name == "Logistic regression":
         refit = build(**chosen[best_name]["params"]).fit(X_train, y_train)
@@ -137,6 +162,7 @@ def train():
         "test_games": int(len(y_test)),
         "test": results[best_name],
         "baselines": {k: results[k] for k in ("Always pick home team", "Elo favorite")},
+        "test_by_month": by_month,
         "trained_on": all_seasons,
         "trained_at": datetime.now(timezone.utc).isoformat(),
     }

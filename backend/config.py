@@ -15,9 +15,12 @@ DB_PATH = BASE_DIR / "data" / "nba.db"
 # How many seasons of history to pull for model training (including the current one).
 HISTORY_SEASONS = 5
 
-# RSS feeds for headlines. Add more sources here as {"Source name": "feed url"}.
+# RSS feeds for headlines. Several sources, so one blocked or broken feed
+# doesn't leave the site without news. Add more as {"Source name": "feed url"}.
 HEADLINE_FEEDS = {
     "ESPN": "https://www.espn.com/espn/rss/nba/news",
+    "CBS Sports": "https://www.cbssports.com/rss/headlines/nba/",
+    "Yahoo Sports": "https://sports.yahoo.com/nba/rss/",
 }
 
 # Seconds to wait between stats.nba.com requests so we don't get rate limited.
