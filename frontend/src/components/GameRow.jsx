@@ -39,12 +39,11 @@ function ProbabilityBar({ game }) {
   const colors = matchupColors(game.away.tricode, game.home.tricode);
   const awayFav = p.away_win_prob > p.home_win_prob;
   const winner = awayFav ? game.away : game.home;
+  const m = game.market;
+  const label = `Model gives ${winner.name} a ${pct(p.winner_prob)} chance to win` +
+    (m ? `. Betting market gives ${m.favorite_tricode} ${pct(m.favorite_prob)}.` : "");
   return (
-    <div
-      className="bar-wrap"
-      role="img"
-      aria-label={`Model gives ${winner.name} a ${pct(p.winner_prob)} chance to win`}
-    >
+    <div className="bar-wrap" role="img" aria-label={label}>
       <div className="bar-labels" aria-hidden="true">
         <span className={awayFav ? "fav" : ""}>{pct(p.away_win_prob)}</span>
         <span className={!awayFav ? "fav" : ""}>{pct(p.home_win_prob)}</span>
@@ -52,7 +51,14 @@ function ProbabilityBar({ game }) {
       <div className="bar-track" aria-hidden="true">
         <span className="bar-fill" style={{ "--share": p.away_win_prob, background: colors.away }} />
         <span className="bar-fill" style={{ "--share": p.home_win_prob, background: colors.home }} />
+        {m && <span className="market-tick" style={{ "--at": m.away_win_prob }} />}
       </div>
+      {m && (
+        <div className="market-line" aria-hidden="true">
+          <span>Market {m.favorite_tricode} {pct(m.favorite_prob)}</span>
+          {m.agrees_with_model === false && <span className="market-differs">Different pick</span>}
+        </div>
+      )}
     </div>
   );
 }

@@ -107,7 +107,7 @@ export default function App() {
       </div>
 
       <footer className="footer">
-        <p>Game data from NBA.com. Headlines from ESPN, CBS Sports, and Yahoo Sports. Predictions are for fun, not betting advice.</p>
+        <p>Game data from NBA.com. Headlines from ESPN, CBS Sports, and Yahoo Sports. Odds from The Odds API. Predictions are for fun, not betting advice.</p>
       </footer>
     </div>
   );

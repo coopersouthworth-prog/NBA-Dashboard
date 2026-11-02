@@ -147,7 +147,25 @@ h2 { font-size: 1.375rem; letter-spacing: 0.01em; margin-bottom: 1rem; }
   margin-bottom: 0.35rem;
 }
 .bar-labels .fav { color: var(--text); font-weight: 600; }
-.bar-track { display: flex; gap: 3px; height: 10px; }
+.bar-track { position: relative; display: flex; gap: 3px; height: 10px; }
+
+/* Where the betting market's probability sits on the same bar. */
+.market-tick {
+  position: absolute;
+  top: -4px; bottom: -4px;
+  left: calc(var(--at) * 100%);
+  width: 2px; margin-left: -1px;
+  background: var(--text);
+  border-radius: 1px;
+  box-shadow: 0 0 0 2px var(--bg);
+}
+.market-line {
+  display: flex; justify-content: center; gap: 0.6rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.market-differs { color: var(--live); font-weight: 600; }
 .bar-fill {
   flex: 0 0 calc(var(--share) * 100% - 1.5px);
   border-radius: 2px;
@@ -178,6 +196,9 @@ h2 { font-size: 1.375rem; letter-spacing: 0.01em; margin-bottom: 1rem; }
 }
 .compare-row.ours .compare-fill { background: var(--text); }
 .compare-value { width: 3.5rem; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+.vs-market { margin-top: 2rem; }
+.vs-market h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.125rem; margin: 0 0 0.75rem; }
 
 /* ---- Headlines ------------------------------------------------------------ */
 .headlines ul { list-style: none; margin: 0; padding: 0; }
