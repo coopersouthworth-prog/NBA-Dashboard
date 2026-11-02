@@ -22,6 +22,16 @@ class Prediction(BaseModel):
     correct: Optional[bool] = None   # filled in once the game is final
 
 
+class Market(BaseModel):
+    """The betting market's view of a game, saved before tip-off."""
+    home_win_prob: float
+    away_win_prob: float
+    favorite_tricode: str
+    favorite_prob: float
+    bookmakers: Optional[int] = None
+    agrees_with_model: Optional[bool] = None   # same pick as the model?
+
+
 class Game(BaseModel):
     game_id: str
     game_date: str
@@ -31,6 +41,7 @@ class Game(BaseModel):
     home: Team
     away: Team
     prediction: Optional[Prediction] = None
+    market: Optional[Market] = None
 
 
 class GamesResponse(BaseModel):
@@ -53,6 +64,20 @@ class Record(BaseModel):
     accuracy: Optional[float] = None
 
 
+class MarketComparison(BaseModel):
+    """Model vs betting market on finished games where both made a call.
+    Lower log loss and Brier score mean better probabilities."""
+    games: int
+    model_accuracy: float
+    market_accuracy: float
+    model_log_loss: float
+    market_log_loss: float
+    model_brier: float
+    market_brier: float
+    disagreements: int          # games where they picked different winners
+    model_won_disagreements: int
+
+
 class ModelInfo(BaseModel):
     model: Optional[str] = None
     test_season: Optional[str] = None
@@ -62,3 +87,4 @@ class ModelInfo(BaseModel):
     baseline_elo_accuracy: Optional[float] = None
     trained_at: Optional[str] = None
     season_record: Record      # live predictions this season
+    vs_market: Optional[MarketComparison] = None

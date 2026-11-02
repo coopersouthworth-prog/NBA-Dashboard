@@ -8,7 +8,8 @@ Usage (from the backend/ folder):
     python run_pipeline.py results     # add newly finished games to the history
     python run_pipeline.py features    # build model features -> data/features.csv
     python run_pipeline.py train       # train, evaluate, and save the model
-    python run_pipeline.py predict     # refresh games + results, then predict today
+    python run_pipeline.py predict     # refresh games + results, predict today, save odds
+    python run_pipeline.py odds        # betting-market odds for upcoming games
     python run_pipeline.py all         # today, headlines, history, results, predict
     python run_pipeline.py copy-to-postgres   # one-time: local SQLite -> DATABASE_URL
 """
@@ -37,7 +38,7 @@ def build_features():
 
 
 TASKS = ["init", "today", "headlines", "history", "results",
-         "features", "train", "predict", "all", "copy-to-postgres"]
+         "features", "train", "predict", "odds", "all", "copy-to-postgres"]
 
 
 def main():
@@ -53,7 +54,7 @@ def main():
         return
 
     init_db()  # safe to run every time
-    if t in ("today", "predict", "all"):
+    if t in ("today", "predict", "odds", "all"):
         update_todays_games()
     if t in ("headlines", "all"):
         update_headlines()
@@ -69,6 +70,9 @@ def main():
     if t in ("predict", "all"):
         from model.predict import predict_today
         predict_today()
+    if t in ("odds", "predict", "all"):
+        from pipeline.odds import update_odds
+        update_odds()
     if t == "init":
         print("[db] tables ready")
 

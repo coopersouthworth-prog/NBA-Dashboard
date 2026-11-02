@@ -5,6 +5,7 @@ Run locally from the backend/ folder:
 Then open http://127.0.0.1:8000/docs to try every endpoint.
 """
 import json
+import math
 import os
 from contextlib import asynccontextmanager
 from datetime import date
@@ -14,7 +15,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
-from app.schemas import Game, GamesResponse, Headline, ModelInfo, Prediction, Record, Team
+from app.schemas import (Game, GamesResponse, Headline, Market, MarketComparison, ModelInfo,
+                         Prediction, Record, Team)
 from db import fetch_all, fetch_value, get_conn, init_db
 
 # The API only reads data, so it avoids importing the heavy model and NBA
@@ -75,11 +77,53 @@ def to_game(row):
             away_win_prob=round(1 - home_p, 4),
             correct=None if won is None else won == row["predicted_winner_id"],
         )
+    market = None
+    if row.get("market_home_prob") is not None:
+        m = row["market_home_prob"]
+        fav_home = m >= 0.5
+        market = Market(
+            home_win_prob=round(m, 4), away_win_prob=round(1 - m, 4),
+            favorite_tricode=row["home_tricode"] if fav_home else row["away_tricode"],
+            favorite_prob=round(max(m, 1 - m), 4), bookmakers=row.get("bookmakers"),
+            agrees_with_model=None if row["home_win_prob"] is None
+            else (row["home_win_prob"] >= 0.5) == fav_home,
+        )
     return Game(game_id=row["game_id"], game_date=row["game_date"],
                 start_time_utc=row["start_time_utc"],
                 status=STATUS.get(row["status"], "scheduled"),
                 status_text=row["status_text"] or "",
-                home=team("home"), away=team("away"), prediction=prediction)
+                home=team("home"), away=team("away"),
+                prediction=prediction, market=market)
+
+
+def compare_to_market(rows):
+    """Score model and market probabilities on the same finished games."""
+    graded = []
+    for r in rows:
+        won = winner_id(r)
+        if won is None or r["market_home_prob"] is None:
+            continue
+        graded.append((int(won == r["home_team_id"]), r["home_win_prob"], r["market_home_prob"]))
+    if not graded:
+        return None
+
+    def log_loss(y, p):
+        p = min(max(p, 1e-6), 1 - 1e-6)
+        return -(y * math.log(p) + (1 - y) * math.log(1 - p))
+
+    n = len(graded)
+    disagree = [(y, m) for y, m, k in graded if (m >= 0.5) != (k >= 0.5)]
+    return MarketComparison(
+        games=n,
+        model_accuracy=sum((m >= 0.5) == y for y, m, _ in graded) / n,
+        market_accuracy=sum((k >= 0.5) == y for y, _, k in graded) / n,
+        model_log_loss=sum(log_loss(y, m) for y, m, _ in graded) / n,
+        market_log_loss=sum(log_loss(y, k) for y, _, k in graded) / n,
+        model_brier=sum((m - y) ** 2 for y, m, _ in graded) / n,
+        market_brier=sum((k - y) ** 2 for y, _, k in graded) / n,
+        disagreements=len(disagree),
+        model_won_disagreements=sum((m >= 0.5) == y for y, m in disagree),
+    )
 
 
 # ---- Endpoints --------------------------------------------------------------
@@ -106,8 +150,11 @@ def games(day: str | None = Query(None, alias="date",
         day = day or fetch_value(conn, "SELECT MAX(game_date) FROM games")
         rows = fetch_all(
             conn,
-            """SELECT g.*, p.home_win_prob, p.predicted_winner_id, p.predicted_tricode
-               FROM games g LEFT JOIN predictions p ON p.game_id = g.game_id
+            """SELECT g.*, p.home_win_prob, p.predicted_winner_id, p.predicted_tricode,
+                      o.market_home_prob, o.bookmakers
+               FROM games g
+               LEFT JOIN predictions p ON p.game_id = g.game_id
+               LEFT JOIN odds o ON o.game_id = g.game_id
                WHERE g.game_date = :day
                ORDER BY g.start_time_utc, g.game_id""", day=day)
     return GamesResponse(
@@ -138,8 +185,10 @@ def model_info():
     with get_conn() as conn:
         rows = fetch_all(
             conn,
-            """SELECT g.*, p.predicted_winner_id FROM predictions p
+            """SELECT g.*, p.predicted_winner_id, p.home_win_prob, o.market_home_prob
+               FROM predictions p
                JOIN games g ON g.game_id = p.game_id
+               LEFT JOIN odds o ON o.game_id = p.game_id
                WHERE g.status = 3 AND g.game_date >= :start""", start=season_start)
     graded = [(winner_id(r), r["predicted_winner_id"]) for r in rows]
     graded = [(w, p) for w, p in graded if w is not None]
@@ -156,4 +205,5 @@ def model_info():
         trained_at=metrics.get("trained_at"),
         season_record=Record(games=len(graded), correct=correct,
                              accuracy=correct / len(graded) if graded else None),
+        vs_market=compare_to_market(rows),
     )

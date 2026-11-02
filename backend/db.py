@@ -90,6 +90,13 @@ SCHEMA = [
         model               TEXT,
         created_at          TEXT
     )""",
+    # Betting-market win probabilities, saved before tip-off to compare against the model.
+    """CREATE TABLE IF NOT EXISTS odds (
+        game_id          TEXT PRIMARY KEY,
+        market_home_prob REAL NOT NULL,     -- vig-free consensus across sportsbooks
+        bookmakers       INTEGER,           -- how many books went into the consensus
+        fetched_at       TEXT
+    )""",
     f"""CREATE TABLE IF NOT EXISTS headlines (
         id           {AUTO_ID},
         title        TEXT NOT NULL,
@@ -161,6 +168,7 @@ TABLE_KEYS = {
     "team_game_stats": ["game_id", "team_id"],
     "games": ["game_id"],
     "predictions": ["game_id"],
+    "odds": ["game_id"],
     "headlines": ["link"],
 }
 

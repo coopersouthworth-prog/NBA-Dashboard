@@ -23,5 +23,8 @@ HEADLINE_FEEDS = {
     "Yahoo Sports": "https://sports.yahoo.com/nba/rss/",
 }
 
+# The Odds API key (free at the-odds-api.com). Without one, odds are skipped.
+ODDS_API_KEY = os.getenv("ODDS_API_KEY", "").strip()
+
 # Seconds to wait between stats.nba.com requests so we don't get rate limited.
 REQUEST_DELAY = 1.5
