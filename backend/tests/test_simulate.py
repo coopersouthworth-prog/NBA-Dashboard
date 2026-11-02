@@ -117,3 +117,48 @@ def test_unscheduled_cup_games_are_filled_in_conference():
     total = per_team + np.bincount(np.ravel(extra), minlength=30)
     assert (total <= SEASON_GAMES).all() and total.sum() >= SEASON_GAMES * 30 - 4
     assert all(conference[h] == conference[a] for h, a in extra)
+
+
+def test_blocked_schedule_falls_back_to_saved_copy_and_updates_results():
+    """In the cloud the NBA refuses the schedule; the saved copy is used instead,
+    with finished games filled in from the history table."""
+    from unittest import mock
+
+    import db
+    from pipeline import schedule
+
+    game = {"game_id": "0022600050", "season": "2026-27", "game_date": "2026-11-01",
+            "start_time_utc": "2026-11-01T23:30:00Z", "status": 1, "home_team_id": 1,
+            "home_tricode": "BOS", "home_team": "Boston Celtics", "home_score": None,
+            "away_team_id": 2, "away_tricode": "NYK", "away_team": "New York Knicks",
+            "away_score": None}
+    with db.get_conn() as conn:
+        db.upsert(conn, "schedule", [game], ["game_id"])
+        db.upsert(conn, "historical_games", [{
+            "game_id": "0022600050", "season": "2026-27", "game_date": "2026-11-01",
+            "home_team_id": 1, "home_tricode": "BOS", "away_team_id": 2,
+            "away_tricode": "NYK", "home_pts": 112, "away_pts": 104, "home_win": 1}],
+            ["game_id"])
+
+    def blocked():
+        raise schedule.ScheduleUnavailable("403 everywhere")
+
+    with mock.patch.object(schedule, "fetch_schedule_json", blocked), \
+         mock.patch.object(schedule, "current_season", lambda: "2026-27"):
+        schedule.update_schedule()
+    with db.get_conn() as conn:
+        row = db.fetch_all(conn, "SELECT * FROM schedule")[0]
+    assert row["status"] == 3 and row["home_score"] == 112 and row["away_score"] == 104
+
+
+def test_blocked_schedule_with_nothing_saved_says_what_to_do():
+    from unittest import mock
+
+    from pipeline import schedule
+
+    def blocked():
+        raise schedule.ScheduleUnavailable("403 everywhere")
+
+    with mock.patch.object(schedule, "fetch_schedule_json", blocked):
+        with pytest.raises(SystemExit, match="from your own computer"):
+            schedule.update_schedule()

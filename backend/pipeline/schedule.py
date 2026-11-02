@@ -3,10 +3,17 @@
 The schedule lists every game with its status and, for finished games, the
 final score, so it gives the season simulator both the current standings and
 the games left to play.
+
+The NBA blocks its schedule files from cloud servers like GitHub Actions. So
+the schedule is downloaded from a home connection (python run_pipeline.py
+schedule), saved in the database, and the scheduled job keeps it current by
+copying final scores in from the history table, which the live box score
+feed (not blocked) fills in after every game.
 """
 import requests
+from sqlalchemy import text
 
-from db import get_conn, upsert
+from db import fetch_all, fetch_value, get_conn, upsert
 from pipeline.history import current_season
 
 SCHEDULE_URLS = [
@@ -25,6 +32,10 @@ HEADERS = {
                    "(KHTML, like Gecko) Chrome/130.0 Safari/537.36"),
 }
 REGULAR_SEASON_PREFIX = "002"
+
+
+class ScheduleUnavailable(Exception):
+    pass
 
 
 def parse_schedule(data):
@@ -84,11 +95,39 @@ def fetch_schedule_json():
         return data
     except Exception as e:  # report every failure together below
         problems.append(f"stats.nba.com: {e.__class__.__name__}: {e}")
-    raise SystemExit("[schedule] couldn't download the schedule:\n  " + "\n  ".join(problems))
+    raise ScheduleUnavailable("[schedule] couldn't download the schedule:\n  " + "\n  ".join(problems))
+
+
+def sync_results_from_history():
+    """Mark saved schedule games final using results already in the history table."""
+    season = current_season()
+    with get_conn() as conn:
+        saved = fetch_value(conn, "SELECT COUNT(*) FROM schedule WHERE season = :s", s=season)
+        if not saved:
+            raise SystemExit("[schedule] no saved schedule to fall back on. Run "
+                             "`python run_pipeline.py schedule` once from your own computer.")
+        finished = fetch_all(
+            conn,
+            """SELECT s.game_id, h.home_pts, h.away_pts FROM schedule s
+               JOIN historical_games h ON h.game_id = s.game_id
+               WHERE s.season = :s AND s.status != 3""", s=season)
+        if finished:
+            conn.execute(text("UPDATE schedule SET status = 3, home_score = :home_pts, "
+                              "away_score = :away_pts WHERE game_id = :game_id"), finished)
+        played = fetch_value(conn, "SELECT COUNT(*) FROM schedule WHERE season = :s "
+                                   "AND status = 3", s=season)
+    print(f"[schedule] using the saved schedule ({saved} games, {played} played; "
+          f"{len(finished)} newly marked final from results)")
 
 
 def update_schedule():
-    season, rows = parse_schedule(fetch_schedule_json())
+    try:
+        data = fetch_schedule_json()
+    except ScheduleUnavailable as e:
+        print(e)
+        sync_results_from_history()
+        return None
+    season, rows = parse_schedule(data)
     if season != current_season():
         print(f"[schedule] warning: feed is for {season}, expected {current_season()}")
     with get_conn() as conn:
