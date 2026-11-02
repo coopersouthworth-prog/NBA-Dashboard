@@ -10,3 +10,4 @@ async function get(path) {
 export const fetchGames = () => get("/api/games");
 export const fetchHeadlines = () => get("/api/headlines?limit=12");
 export const fetchModel = () => get("/api/model");
+export const fetchProjections = () => get("/api/projections");

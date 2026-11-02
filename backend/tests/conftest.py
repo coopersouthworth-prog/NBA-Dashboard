@@ -22,7 +22,8 @@ from sqlalchemy import text  # noqa: E402
 import db  # noqa: E402
 from pipeline.history import STAT_COLS, build_tables  # noqa: E402
 
-TABLES = ["games", "historical_games", "team_game_stats", "predictions", "odds", "headlines"]
+TABLES = ["games", "historical_games", "team_game_stats", "predictions", "odds",
+          "schedule", "projections", "headlines"]
 
 
 @pytest.fixture(autouse=True)

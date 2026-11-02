@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 
 from app.schemas import (Game, GamesResponse, Headline, Market, MarketComparison, ModelInfo,
-                         Prediction, Record, Team)
+                         Prediction, ProjectionsResponse, Record, Team, TeamProjection)
 from db import fetch_all, fetch_value, get_conn, init_db
 
 # The API only reads data, so it avoids importing the heavy model and NBA
@@ -174,6 +174,21 @@ def headlines(limit: int = Query(15, ge=1, le=50)):
                ORDER BY COALESCE(published_at, fetched_at) DESC LIMIT :limit""",
             limit=limit)
     return [Headline(**r) for r in rows]
+
+
+@app.get("/api/projections", response_model=ProjectionsResponse)
+def projections():
+    """Projected records and playoff odds from the latest season simulation."""
+    with get_conn() as conn:
+        rows = fetch_all(conn, "SELECT * FROM projections ORDER BY proj_wins DESC, tricode")
+    teams = {"East": [], "West": []}
+    for r in rows:
+        r["logo_url"] = LOGO_URL.format(team_id=r["team_id"])
+        teams.setdefault(r["conference"], []).append(TeamProjection(**r))
+    first = rows[0] if rows else {}
+    return ProjectionsResponse(simulated_at=first.get("simulated_at"), sims=first.get("sims"),
+                               games_left=first.get("games_left"),
+                               east=teams["East"], west=teams["West"])
 
 
 @app.get("/api/model", response_model=ModelInfo)

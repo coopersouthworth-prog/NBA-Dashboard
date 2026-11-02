@@ -88,3 +88,29 @@ class ModelInfo(BaseModel):
     trained_at: Optional[str] = None
     season_record: Record      # live predictions this season
     vs_market: Optional[MarketComparison] = None
+
+
+class TeamProjection(BaseModel):
+    team_id: int
+    tricode: str
+    name: str
+    logo_url: str
+    wins: int
+    losses: int
+    proj_wins: float
+    proj_losses: float
+    p_top6: float
+    p_playin: float
+    p_playoffs: float
+    p_second_round: float
+    p_conf_finals: float
+    p_finals: float
+    p_title: float
+
+
+class ProjectionsResponse(BaseModel):
+    simulated_at: Optional[str] = None
+    sims: Optional[int] = None
+    games_left: Optional[int] = None
+    east: list[TeamProjection]
+    west: list[TeamProjection]

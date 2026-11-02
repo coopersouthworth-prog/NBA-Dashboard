@@ -4,6 +4,21 @@ import { formatClock, formatGameDay, pct } from "./format.js";
 import GameRow from "./components/GameRow.jsx";
 import Headlines from "./components/Headlines.jsx";
 import ModelPanel from "./components/ModelPanel.jsx";
+import Projections from "./components/Projections.jsx";
+
+// Two views, chosen by the link's #hash so each can be bookmarked or shared.
+const VIEWS = { today: "", odds: "#playoff-odds" };
+
+function useView() {
+  const read = () => (window.location.hash === VIEWS.odds ? "odds" : "today");
+  const [view, setView] = useState(read);
+  useEffect(() => {
+    const onChange = () => { setView(read()); window.scrollTo(0, 0); };
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  return view;
+}
 
 const GAMES_REFRESH_MS = 60_000;        // scores
 const SLOW_REFRESH_MS = 10 * 60_000;    // headlines + model record
@@ -50,10 +65,10 @@ export default function App() {
 
   useEffect(() => {
     const t = setInterval(loadGames, error ? RETRY_MS : GAMES_REFRESH_MS);
-
     return () => clearInterval(t);
   }, [loadGames, error]);
 
+  const view = useView();
   const loading = games === null && !error;
   const slow = useSlowStartNotice(loading);
   const record = model?.season_record;
@@ -62,10 +77,22 @@ export default function App() {
   return (
     <div className="page">
       <header className="masthead">
-        <div className="brand">
-          <img src="/favicon.svg" width="22" height="22" alt="" />
-          <span>Tip-Off</span>
+        <div className="brand-row">
+          <div className="brand">
+            <img src="/favicon.svg" width="22" height="22" alt="" />
+            <span>Tip-Off</span>
+          </div>
+          <nav className="nav" aria-label="Pages">
+            <a href="#" aria-current={view === "today" ? "page" : undefined}>Today</a>
+            <a href={VIEWS.odds} aria-current={view === "odds" ? "page" : undefined}>Playoff odds</a>
+          </nav>
         </div>
+        {view === "odds" ? (
+          <div className="masthead-main">
+            <h1>Playoff odds</h1>
+            <p className="masthead-sub">The rest of the season, simulated thousands of times with the model’s predictions.</p>
+          </div>
+        ) : (
         <div className="masthead-main">
           <h1>{formatGameDay(games?.date)}</h1>
           {games && (
@@ -75,7 +102,8 @@ export default function App() {
             </p>
           )}
         </div>
-        {record && record.games > 0 && (
+        )}
+        {view === "today" && record && record.games > 0 && (
           <div className="record" aria-label={`Model record this season: ${record.correct} correct out of ${record.games}`}>
             <span className="record-value">{record.correct}–{record.games - record.correct}</span>
             <span className="record-label">Model’s record this season, {pct(record.accuracy)} correct</span>
@@ -83,6 +111,7 @@ export default function App() {
         )}
       </header>
 
+      {view === "odds" ? <Projections /> : (
       <div className="layout">
         <main>
           {error && <p className="notice notice-error" role="alert">{error}</p>}
@@ -105,9 +134,13 @@ export default function App() {
           <Headlines headlines={headlines} />
         </aside>
       </div>
+      )}
 
       <footer className="footer">
-        <p>Game data from NBA.com. Headlines from ESPN, CBS Sports, and Yahoo Sports. Odds from The Odds API. Predictions are for fun, not betting advice.</p>
+        <p>
+          Game data from NBA.com. Headlines from ESPN, CBS Sports, and Yahoo Sports. Odds from The Odds API.
+          Predictions are for fun, not betting advice.
+        </p>
       </footer>
     </div>
   );

@@ -97,6 +97,43 @@ SCHEMA = [
         bookmakers       INTEGER,           -- how many books went into the consensus
         fetched_at       TEXT
     )""",
+    # The full regular-season schedule, with results for games already played.
+    """CREATE TABLE IF NOT EXISTS schedule (
+        game_id        TEXT PRIMARY KEY,
+        season         TEXT NOT NULL,
+        game_date      TEXT NOT NULL,
+        start_time_utc TEXT,
+        status         INTEGER,          -- 1 = scheduled, 2 = live, 3 = final
+        home_team_id   INTEGER NOT NULL,
+        home_tricode   TEXT,
+        home_team      TEXT,
+        home_score     INTEGER,
+        away_team_id   INTEGER NOT NULL,
+        away_tricode   TEXT,
+        away_team      TEXT,
+        away_score     INTEGER
+    )""",
+    # Season simulation results: one row per team, replaced on every run.
+    """CREATE TABLE IF NOT EXISTS projections (
+        team_id        INTEGER PRIMARY KEY,
+        tricode        TEXT,
+        name           TEXT,
+        conference     TEXT,
+        wins           INTEGER,          -- record so far
+        losses         INTEGER,
+        proj_wins      REAL,             -- average final record across simulations
+        proj_losses    REAL,
+        p_top6         REAL,             -- finish 1st-6th: straight into the playoffs
+        p_playin       REAL,             -- finish 7th-10th
+        p_playoffs     REAL,             -- top 6, or make it through the play-in
+        p_second_round REAL,
+        p_conf_finals  REAL,
+        p_finals       REAL,
+        p_title        REAL,
+        sims           INTEGER,
+        games_left     INTEGER,          -- regular-season games left league-wide
+        simulated_at   TEXT
+    )""",
     f"""CREATE TABLE IF NOT EXISTS headlines (
         id           {AUTO_ID},
         title        TEXT NOT NULL,
@@ -169,6 +206,8 @@ TABLE_KEYS = {
     "games": ["game_id"],
     "predictions": ["game_id"],
     "odds": ["game_id"],
+    "schedule": ["game_id"],
+    "projections": ["team_id"],
     "headlines": ["link"],
 }
 
