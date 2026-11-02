@@ -1,5 +1,5 @@
 # Tip-Off: NBA Games, Headlines, and Win Predictions
-
+![Tests](https://github.com/coopersouthworth-prog/NBA-Dashboard/actions/workflows/tests.yml/badge.svg)
 A full-stack dashboard that shows each day's NBA games with live scores, the latest headlines, and a machine learning model's predicted winner and win probability for every matchup.
 
 **Live site:** (https://nba-dashboard-nu.vercel.app) (the first load can take up to a minute while the free server wakes up)
